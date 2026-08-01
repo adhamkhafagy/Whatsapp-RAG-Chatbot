@@ -119,9 +119,8 @@ async def receive_message(request: Request):
         user_text = message["text"]["body"]
 
         answer = get_answer(user_text)
-        send_whatsapp_message(sender_number, answer)
-
-    except (KeyError, IndexError):
-        pass
-
-    return {"status": "received"}
+        result = send_whatsapp_message(sender_number, answer)
+        print("Send result:", result)
+    except (KeyError, IndexError) as e:
+        print("Error processing message:", e)
+        print("Raw data:", data)
