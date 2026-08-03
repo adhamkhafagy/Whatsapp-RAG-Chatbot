@@ -13,6 +13,15 @@ WHATSAPP_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN")
 PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
 VERIFY_TOKEN = "novamart_verify_123"
 
+conversation_history = {}
+
+def update_history(sender_number, role, text, max_messages=6):
+    if sender_number not in conversation_history:
+        conversation_history[sender_number] = []
+    conversation_history[sender_number].append({"role": role, "text": text})
+    conversation_history[sender_number] = conversation_history[sender_number][-max_messages:]
+
+
 app = FastAPI()
 
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -55,19 +64,33 @@ def retrieve_relevant_chunks(query, top_k=3):
     )
     return results["documents"][0]
 
-def build_prompt(query, context_chunks):
+def build_prompt(query, context_chunks, history=None):
     context = "\n\n".join(context_chunks)
+
+    history_text = ""
+    if history:
+        for msg in history:
+            speaker = "Customer" if msg["role"] == "user" else "Assistant"
+            history_text += f"{speaker}: {msg['text']}\n"
+
     prompt = f"""
-You are a helpful customer support assistant for NovaMart, an online store.
-Answer the customer's question using ONLY the context below. If the answer is not
-in the context, say you don't have that information and suggest contacting support.
+You are a friendly, professional customer support assistant for NovaMart, an online store.
+
+STRICT RULES:
+1. Answer using ONLY the information in the context below. Do not guess or make up details.
+2. If the answer is not in the context, say so briefly and suggest contacting support — do not invent an answer.
+3. Detect the language of the customer's question. If they wrote in Arabic, answer in Arabic.
+   If they wrote in English, answer in English.
+4. Keep your answer short and conversational — 2 to 4 sentences maximum. Avoid long paragraphs or robotic lists unless the question specifically asks for steps.
+5. Use the previous conversation (if any) to understand context, but always base facts only on the context below.
 
 Context:
 {context}
 
-Customer question: {query}
+Previous conversation:
+{history_text}
 
-Answer clearly and concisely in a friendly, professional tone.
+Customer question: {query}
 """
     return prompt
 
@@ -118,9 +141,23 @@ async def receive_message(request: Request):
         sender_number = message["from"]
         user_text = message["text"]["body"]
 
-        answer = get_answer(user_text)
+        history = conversation_history.get(sender_number, [])
+
+        relevant_chunks = retrieve_relevant_chunks(user_text)
+        prompt = build_prompt(user_text, relevant_chunks, history)
+
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        answer = response.choices[0].message.content
+
+        update_history(sender_number, "user", user_text)
+        update_history(sender_number, "assistant", answer)
+
         result = send_whatsapp_message(sender_number, answer)
         print("Send result:", result)
+
     except (KeyError, IndexError) as e:
         print("Error processing message:", e)
         print("Raw data:", data)
