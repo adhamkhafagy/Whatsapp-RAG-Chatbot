@@ -8,7 +8,7 @@ from pypdf import PdfReader
 from groq import Groq
 import re
 from rank_bm25 import BM25Okapi
-from sentence_transformers import CrossEncoder
+
 
 load_dotenv()
 
@@ -52,7 +52,6 @@ def smart_chunk_text(text):
     return chunks
 
 embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
-reranker_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 text = extract_text_from_pdf("NovaMart_FAQ_Policies.pdf")
 chunks = smart_chunk_text(text)
@@ -91,11 +90,6 @@ def hybrid_retrieve(query, chunks, bm25_index, collection, embedding_model, top_
 
 bm25_index = build_bm25_index(chunks)
 
-def rerank_chunks(query, chunks, top_k=3):
-    pairs = [[query, c] for c in chunks]
-    scores = reranker_model.predict(pairs)
-    ranked = sorted(zip(chunks, scores), key=lambda x: x[1], reverse=True)
-    return [c for c, s in ranked[:top_k]]
 
 def compress_context(query, chunks):
     context = "\n\n".join(chunks)
@@ -193,7 +187,6 @@ async def receive_message(request: Request):
         history = conversation_history.get(sender_number, [])
 
         relevant_chunks = hybrid_retrieve(user_text, chunks, bm25_index, collection, embedding_model)
-        relevant_chunks = rerank_chunks(user_text, relevant_chunks)
         prompt = build_prompt(user_text, relevant_chunks, history)
         
 
