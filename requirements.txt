@@ -6,3 +6,4 @@ chromadb
 pypdf
 groq
 python-dotenv
+rank-bm25
