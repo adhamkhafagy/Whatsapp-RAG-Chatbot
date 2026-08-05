@@ -41,7 +41,7 @@ def smart_chunk_text(text):
     chunks = []
     for section in sections:
         section = section.strip()
-        if not section:
+        if not section or len(section.split()) < 8:
             continue
         if len(section.split()) > 250:
             words = section.split()
@@ -51,7 +51,7 @@ def smart_chunk_text(text):
             chunks.append(section)
     return chunks
 
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 reranker_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 text = extract_text_from_pdf("NovaMart_FAQ_Policies.pdf")
@@ -194,8 +194,7 @@ async def receive_message(request: Request):
 
         relevant_chunks = hybrid_retrieve(user_text, chunks, bm25_index, collection, embedding_model)
         relevant_chunks = rerank_chunks(user_text, relevant_chunks)
-        compressed_context = compress_context(user_text, relevant_chunks)
-        prompt = build_prompt(user_text, [compressed_context], history) 
+        prompt = build_prompt(user_text, relevant_chunks, history)
         
 
         response = groq_client.chat.completions.create(
